@@ -1,0 +1,22 @@
+Risk Severity: HIGH
+Risk Analysis: The code uses string concatenation to construct the SQL query, which can be exploited for SQL Injection attacks. An attacker could input specially crafted data to manipulate the query and potentially gain unauthorized access to the system or data.
+Corrected Code Fix:
+import sqlite3
+
+def login_user(username, password):
+    # Use parameterized queries to prevent SQL Injection
+    query = "SELECT * FROM users WHERE username = ? AND password = ?"
+    
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute(query, (username, password))
+    user = cursor.fetchone()
+    return user
+
+Risk Severity: HIGH
+Risk Analysis: Hardcoding sensitive information like API keys directly into the code is a critical security issue. If the code is exposed (e.g., through a version control system or application code), the secret can be easily accessed by an attacker, leading to unauthorized access or other malicious actions.
+Corrected Code Fix:
+# Replace with secure secret management methods like environment variables
+import os
+
+admin_api_key = os.environ.get("ADMIN_API_KEY")
