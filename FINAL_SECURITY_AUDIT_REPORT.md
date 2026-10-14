@@ -1,134 +1,165 @@
-# 🛡️ Apertus Sentinel — Automated Security Audit Report
+# 🛡️ Apertus Sentinel — Security Audit Report
 
-**Model:** `swiss-ai/Apertus-v1.5-8B` | **Files Audited:** 5
+![Security Score](https://img.shields.io/badge/Apertus_Security_Score-0%25-red) ![Audited Files](https://img.shields.io/badge/Files_Audited-5-blue)
+
+**Target Directory:** `test_cases/` | **Model:** `swiss-ai/Apertus-v1.5-8B` | **High Risks Found:** 5
 
 ---
 
 ## File: `bank_payment_hijack.py`
 
-| Vulnerability Name | Severity | Impact Analysis | Remediation |
-|---|---|---|---|
-| Lack of Authentication and Authorization | HIGH | Unauthorized access to transfer functionality allows attackers to initiate fraudulent transactions from arbitrary user accounts to specified IBANs, potentially resulting in significant financial loss. | Implement multi-factor authentication for users, validate user session tokens, and verify transaction authorization through secure tokens or signed requests. |
-| Insecure Direct Object References | HIGH | The use of `user_id` as a direct parameter without validation can allow attackers to request transfers to arbitrary user accounts if the user_id can be manipulated. | Validate and sanitize input parameters, ensure that `user_id` is associated with an authenticated user, and prevent access to unauthorized user accounts or sensitive operations. |
-| Insecure Data Handling | MEDIUM | No encryption or hashing of sensitive payment details like amount and target_iban during transmission, exposing these values to interception in transit. | Use HTTPS and consider encrypting sensitive data fields or hashing amounts before sending, however, consider using standard industry protocols like TLS and avoid sending sensitive data unnecessarily. |
-| Missing Input Validation | MEDIUM | The code does not validate the format or range of the provided parameters, potentially leading to unexpected behavior or exploitation by sending non-standard IBAN values or negative amounts. | Validate input parameters like `amount` for correct numeric format and non-negative values, and validate `target_iban` for correct IBAN format before processing. |
+### ⚠️ Identified Vulnerability
+**Name:** Lack of Transaction Validation, Authorization, and Account Verification
+**Severity:** HIGH
 
-Corrected secure Python code block:
+### 🔍 Impact Analysis
+The function `process_user_payout` is vulnerable to unauthorized funds transfer attacks due to the absence of critical security controls:
+- No transaction validation (e.g., verifying `user_id` or `amount` formats).
+- No multi-factor authentication (MFA) or user confirmation step.
+- No recipient account (IBAN) validation to prevent spoofing.
+An attacker could potentially forge requests to transfer arbitrary amounts to fraudulent accounts, leading to financial loss.
 
+### 🛠️ Remediation & Patch
 ```python
 import requests
-from requests.exceptions import RequestException
+from typing import Dict
 
-def process_user_payout(user_id, amount, target_iban):
-    # Authentication and Authorization check
-    if not is_user_authenticated(user_id):
-        raise AuthenticationError("User not authenticated")
+def process_user_payout(user_id: str, amount: float, target_iban: str) -> Dict:
+    # REQUIRED: Validate user_id format
+    if not validate_user_id(user_id):
+        raise ValueError("Invalid user_id")
     
-    # Input validation
+    # REQUIRED: Validate amount (positive float)
+    if amount <= 0:
+        raise ValueError("Amount must be positive")
+    
+    # REQUIRED: Validate target_iban format (e.g., check IBAN length, pattern)
     if not validate_iban(target_iban):
-        raise InvalidIBANError("Invalid IBAN format")
-    if not validate_amount(amount):
-        raise InvalidAmountError("Invalid amount format or negative value")
+        raise ValueError("Invalid IBAN")
     
-    try:
-        payload = {
-            "user_id": user_id,
-            "amount": amount,
-            "recipient_iban": target_iban
-        }
-        response = requests.post("https://api.bank.com/v1/transfer", json=payload, timeout=10)
-        return response.json()
-    except RequestException as e:
-        raise ProcessingError(f"Transfer request failed: {e}")
+    # REQUIRED: Multi-factor authentication step (e.g., retrieve token from database/user session)
+    auth_token = get_auth_token(user_id)
+    if not auth_token:
+        raise PermissionError("Unauthorized user")
+    
+    payload = {
+        "user_id": user_id,
+        "amount": amount,
+        "recipient_iban": target_iban,
+        "auth_token": auth_token
+    }
+    response = requests.post("https://api.bank.com/v1/transfer", json=payload)
+    return response.json()
+
+def validate_user_id(user_id: str) -> bool:
+    # Example: simple length check; production should use regex/validation
+    return len(user_id) == 10 and user_id.isalnum()
+
+def validate_iban(iban: str) -> bool:
+    # Example: simple length check; production should use regex/validation
+    return len(iban) == 34
+
+def get_auth_token(user_id: str) -> str:
+    # Implementation: Fetch token from secure storage/database
+    # For demo, returning mock token
+    return "secure_auth_token"
 ```
 
 ---
 
 ## File: `command_injection.py`
 
-| Vulnerability Name | Severity | Impact Analysis | Remediation |
-|---|---|---|---|
-| Command Injection | HIGH | An attacker can inject malicious command strings into the hostname parameter, potentially leading to unauthorized system access, data theft, or system compromise. | Use Python's `subprocess` module with arguments handling or a library like `paramiko` for secure network operations. Never concatenate user input directly into command strings. |
+### ⚠️ Identified Vulnerability
+**Name:** Command Injection
+**Severity:** HIGH
 
-Corrected secure Python code:
+### 🔍 Impact Analysis
+The function `ping_host(hostname)` constructs a command string by concatenating user input (`hostname`) directly with a system command (`ping -c 1`). This allows an attacker to inject arbitrary OS commands, potentially leading to unauthorized access, data exfiltration, or system compromise.
 
+### 🛠️ Remediation & Patch
 ```python
 import subprocess
 
 def ping_host(hostname):
-    try:
-        result = subprocess.run(['ping', '-c', '1', hostname], capture_output=True, text=True)
-        print(result.stdout)
-    except Exception as e:
-        print(f"Error pinging host: {e}")
+    # Secure approach using subprocess.run with proper argument handling
+    subprocess.run(["ping", "-c", "1", hostname], check=True)
 ```
 
 ---
 
 ## File: `context_infiltration.py`
 
-| Vulnerability Name | Severity | Impact Analysis | Remediation |
-|---|---|---|---|
-| Prompt Injection (OWASP LLM01) | HIGH | Untrusted input can manipulate the behavior of the LLM by injecting system instructions, leading to unintended actions such as unauthorized fund transfers, data leakage, or policy violations. | Validate and sanitize all external inputs before forming the prompt, using input cleaning or whitelisting mechanisms and enforcing strict isolation rules between user data and system commands. |
+### ⚠️ Identified Vulnerability
+**Name:** Prompt Injection (OWASP LLM01)
+**Severity:** HIGH
 
-Corrected secure Python code:
+### 🔍 Impact Analysis
+The function `process_incoming_document` directly incorporates untrusted input from `untrusted_input` into the LLM prompt. This allows an attacker to inject malicious instructions targeting the LLM's behavior, such as unauthorized financial transactions (`transfer $5000`). Without sanitization or isolation of input boundaries, the crafted prompt can override legitimate instructions or expose sensitive actions, leading to potential data exfiltration or fraud.
 
+### 🛠️ Remediation & Patch
 ```python
-import re
-
 def process_incoming_document(file_text):
-    # Strip and validate the document text - remove any leading/trailing whitespace
-    cleaned_text = file_text.strip()
+    # Secure: Sanitize and validate input before LLM interaction
+    sanitized_input = validate_and_sanitize(file_text)  # Implement validation logic
     
-    # Optional: Apply additional sanitization such as regex pattern matching for allowed characters
-    cleaned_text = re.sub(r'[^\w\s]', '', cleaned_text)
-    
-    # Form the safe prompt using the cleaned text only
-    prompt = f"Summarize this document for the user: {cleaned_text}"
+    prompt = f"Summarize this document for the user: {sanitized_input}"
     return prompt
 ```
+*Note: Ensure the `validate_and_sanitize` function prevents injection by removing or encoding special system commands and restricting input to expected formats.*
 
 ---
 
 ## File: `hardcoded_secret.py`
 
-| Vulnerability Name | Severity | Impact Analysis | Remediation |
-|---|---|---|---|
-| Hardcoded Secret | HIGH | The AWS_SECRET_KEY is directly exposed in the code, which poses a severe security risk. If an attacker gains access to the source code, they can use the secret key to impersonate the user or perform unauthorized actions on AWS resources. | Remove the hardcoded secret key from the code. Store the secret key in an environment variable or a secure secret management system like AWS Secrets Manager or HashiCorp Vault. Access the secret key dynamically at runtime. |
+### ⚠️ Identified Vulnerability
+**Name:** Hardcoded Secret Exposure
+**Severity:** HIGH
 
-Corrected Secure Python Code:
+### 🔍 Impact Analysis
+The AWS_SECRET_KEY is hardcoded directly into the source code with a generic placeholder value (`"AKIAIOSFODNN7EXAMPLE"`). This exposes sensitive credentials to anyone with access to the source code repository, including attackers, developers, or collaborators. Such secrets can be used for unauthorized access, API abuse, data exfiltration, or further malicious activities leveraging AWS resources.
 
+### 🛠️ Remediation & Patch
 ```python
 import os
-import requests
+
+# Remove the hardcoded secret value
+# AWS_SECRET_KEY = "AKIAIOSFODNN7EXAMPLE"
 
 def connect_aws():
+    # Load AWS credentials from environment variables
     aws_secret_key = os.getenv("AWS_SECRET_KEY")
     if not aws_secret_key:
-        raise ValueError("AWS_SECRET_KEY environment variable is not set")
+        raise ValueError("AWS_SECRET_KEY environment variable is missing")
+    
     headers = {"Authorization": f"Bearer {aws_secret_key}"}
     response = requests.get("https://aws.amazon.com/api", headers=headers)
     return response.status_code
 ```
+**Best practice:** Store sensitive credentials in environment variables or secure secrets management services (e.g., AWS Secrets Manager, HashiCorp Vault), and never commit them to version control.
 
 ---
 
 ## File: `sql_injection.py`
 
-| Vulnerability Name | Severity | Impact Analysis | Remediation |
-|---|---|---|---|
-| SQL Injection | HIGH | An attacker can manipulate the user_id parameter to alter the SQL query, potentially allowing unauthorized data retrieval, modification, or deletion. | Use parameterized queries or prepared statements to ensure user input is properly escaped. |
+### ⚠️ Identified Vulnerability
+**Name:** SQL Injection
+
+**Severity:** HIGH
+
+### 🔍 Impact Analysis
+The function `get_user_data` concatenates the user-supplied `user_id` directly into the SQL query string without parameterization. This construction allows an attacker to inject malicious SQL code. For example, passing a user_id value such as `' OR '1'='1'` could bypass authentication or retrieve unauthorized data.
+
+### 🛠️ Remediation & Patch
 ```python
 import sqlite3
 
 def get_user_data(user_id):
-    # Secure version
+    # Secure implementation using parameterized query
+    query = "SELECT * FROM users WHERE id = ?"
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
-    query = "SELECT * FROM users WHERE id = ?"
     cursor.execute(query, (user_id,))
     return cursor.fetchone()
-    conn.close()
 ```
 
 ---
